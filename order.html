@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+    <title>Order Form - Amara Enterprises</title>
+    <link rel="stylesheet" href="style.css"/>
+</head>
+<body>
+
+<header>
+    <h1>Amara Enterprises</h1>
+    <p>Your Partner in Business Growth</p>
+</header>
+
+<nav>
+    <a href="index.html">Home</a>
+    <a href="services.html">Services</a>
+    <a href="order.html">Order Now</a>
+    <a href="contact.html">Contact</a>
+</nav>
+
+<section class="hero">
+    <h2>Place Your Order</h2>
+</section>
+
+<section class="content">
+    <form action="send_order.php" method="POST">
+        <label for="name">Your Name:</label><br/>
+        <input type="text" id="name" name="name" required/><br/><br/>
+
+        <label for="email">Your Email:</label><br/>
+        <input type="email" id="email" name="email" required/><br/><br/>
+
+        <label for="service">Service Type:</label><br/>
+        <select id="service" name="service">
+            <option value="Merchandise">Merchandise & Branding</option>
+            <option value="Sourcing">Product Sourcing</option>
+            <option value="Food Cart">Food Cart</option>
+        </select><br/><br/>
+
+        <label for="message">Describe Your Request:</label><br/>
+        <textarea id="message" name="message" rows="5" required></textarea><br/><br/>
+
+        <button type="submit">Submit Order</button>
+    </form>
+</section>
+
+<footer>
+    <p>&copy; 2025 Amara Enterprises | 
+    <a href=" https://www.facebook.com/profile.php?id=100076263330506" target="_blank">Follow us on Facebook</a></p>
+</footer>
+
+</body>
+</html>

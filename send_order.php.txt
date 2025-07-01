@@ -1,0 +1,21 @@
+<?php
+if ($_SERVER["REQUEST_METHOD"] == "POST") {
+    $name = htmlspecialchars($_POST['name']);
+    $email = filter_var($_POST['email'], FILTER_SANITIZE_EMAIL);
+    $service = htmlspecialchars($_POST['service']);
+    $message = htmlspecialchars($_POST['message']);
+
+    $to = "your-email@example.com"; // ← Replace with your real email
+    $subject = "New Order from $name";
+    $body = "Name: $name\nEmail: $email\nService: $service\n\n$message";
+    $headers = "From: $email";
+
+    if (mail($to, $subject, $body, $headers)) {
+        echo "<h2>Thank You!</h2><p>Your request has been sent successfully.</p>";
+    } else {
+        echo "<h2>Error</h2><p>There was a problem sending your request. Please try again.</p>";
+    }
+} else {
+    echo "<h2>Invalid Request</h2>";
+}
+?>
