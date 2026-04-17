@@ -43,7 +43,7 @@ if (empty($message) || strlen($message) > 2000) {
     exit(render_page("Invalid Input", "<h2>Invalid Message</h2><p>Message must be between 1 and 2000 characters.</p>"));
 }
 
-$to      = getenv('CONTACT_EMAIL') ?: 'your-email@example.com';
+$to      = getenv('CONTACT_EMAIL') ?: 'inquiry@amaragroup.online';
 $subject = "New Order from " . $name;
 $body    = "Name: $name\nEmail: $email\nService: $service\n\nMessage:\n$message";
 $headers = implode("\r\n", [

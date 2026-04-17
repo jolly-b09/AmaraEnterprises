@@ -1,4 +1,4 @@
-name: Deploy to Production
+name: Deploy to Firebase Hosting
 
 on:
   push:
@@ -6,14 +6,14 @@ on:
   workflow_dispatch:
     inputs:
       dry_run:
-        description: "Dry run (no actual upload)"
+        description: "Preview only – list files without deploying"
         required: false
         default: "false"
         type: boolean
 
 jobs:
   deploy:
-    name: Deploy via FTP
+    name: Deploy to Firebase
     runs-on: ubuntu-latest
     environment: production
     concurrency:
@@ -23,55 +23,54 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # Run CI checks before deploying
-      - name: Setup PHP 8.2
-        uses: shivammathur/setup-php@v2
+      # Gate: validate HTML before deploying
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
         with:
-          php-version: "8.2"
+          node-version: "20"
 
-      - name: PHP syntax gate
-        run: php -l send_order.php
+      - name: Install html-validate
+        run: npm install -g html-validate
 
-      - name: Verify required secrets exist
+      - name: HTML validation gate
         run: |
-          if [ -z "${{ secrets.FTP_SERVER }}" ]; then
-            echo "ERROR: FTP_SERVER secret is not set. Add it in Settings → Secrets → Actions."
+          ERRORS=0
+          for file in *.html; do
+            html-validate "$file" || ERRORS=$((ERRORS + 1))
+          done
+          if [ $ERRORS -gt 0 ]; then
+            echo "HTML validation failed — deploy blocked."
             exit 1
           fi
-          if [ -z "${{ secrets.FTP_USERNAME }}" ]; then
-            echo "ERROR: FTP_USERNAME secret is not set."
-            exit 1
-          fi
-          if [ -z "${{ secrets.FTP_PASSWORD }}" ]; then
-            echo "ERROR: FTP_PASSWORD secret is not set."
-            exit 1
-          fi
-          echo "All required secrets present."
 
-      - name: Deploy via FTP
-        if: ${{ github.event.inputs.dry_run != 'true' }}
-        uses: SamKirkland/FTP-Deploy-Action@v4.3.4
-        with:
-          server: ${{ secrets.FTP_SERVER }}
-          username: ${{ secrets.FTP_USERNAME }}
-          password: ${{ secrets.FTP_PASSWORD }}
-          server-dir: ${{ secrets.FTP_SERVER_DIR || '/' }}
-          exclude: |
-            **/.git*
-            **/.git*/**
-            **/node_modules/**
-            send_order.php.txt
-            .htmlvalidate.json
-
+      # Dry-run: list what would be deployed
       - name: Dry run summary
         if: ${{ github.event.inputs.dry_run == 'true' }}
         run: |
-          echo "DRY RUN – files that would be deployed:"
-          find . -not -path './.git*' -not -name '*.txt' -type f | sort
+          echo "DRY RUN – files that would be deployed to Firebase (amara-business-system):"
+          find . \
+            -not -path './.git*' \
+            -not -name 'firebase.json' \
+            -not -name '.firebaserc' \
+            -not -name '.htaccess' \
+            -not -name 'send_order.php' \
+            -not -name 'send_order.php.txt' \
+            -not -path './.github*' \
+            -type f | sort
+
+      # Deploy to Firebase Hosting live channel
+      - name: Deploy to Firebase Hosting
+        if: ${{ github.event.inputs.dry_run != 'true' }}
+        uses: FirebaseExtended/action-hosting-deploy@v0
+        with:
+          repoToken: ${{ secrets.GITHUB_TOKEN }}
+          firebaseServiceAccount: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+          channelId: live
+          projectId: amara-business-system
 
       - name: Deployment summary
         if: ${{ github.event.inputs.dry_run != 'true' && success() }}
         run: |
-          echo "Deployed to production at $(date -u '+%Y-%m-%d %H:%M:%S UTC')"
+          echo "Deployed to Firebase Hosting (amara-business-system) at $(date -u '+%Y-%m-%d %H:%M:%S UTC')"
           echo "Commit: ${{ github.sha }}"
           echo "Triggered by: ${{ github.actor }}"
