@@ -1,0 +1,54 @@
+name: Scheduled Backup
+
+on:
+  schedule:
+    - cron: "0 2 * * *" # Daily at 02:00 UTC
+  workflow_dispatch:
+
+jobs:
+  backup:
+    name: Backup Website Files
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Create backup archive
+        run: |
+          BACKUP_DATE=$(date -u +%Y%m%d_%H%M%S)
+          BACKUP_NAME="amaraenterprises_backup_${BACKUP_DATE}.tar.gz"
+          tar -czf "$BACKUP_NAME" \
+            --exclude='.git' \
+            --exclude='node_modules' \
+            --exclude='*.tar.gz' \
+            .
+          SIZE=$(du -sh "$BACKUP_NAME" | cut -f1)
+          echo "BACKUP_NAME=$BACKUP_NAME" >> "$GITHUB_ENV"
+          echo "Backup created: $BACKUP_NAME ($SIZE)"
+
+      - name: Upload backup artifact (retained 30 days)
+        uses: actions/upload-artifact@v4
+        with:
+          name: backup-${{ github.run_number }}-${{ github.run_attempt }}
+          path: ${{ env.BACKUP_NAME }}
+          retention-days: 30
+
+      # Optional: tag the repo for a point-in-time git restore
+      - name: Create backup git tag
+        run: |
+          git config user.name  "GitHub Actions"
+          git config user.email "actions@github.com"
+          BACKUP_TAG="backup/$(date -u +%Y-%m-%d)"
+          git tag -f "$BACKUP_TAG"
+          git push origin "$BACKUP_TAG" --force
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Backup summary
+        run: |
+          echo "Backup completed at $(date -u '+%Y-%m-%d %H:%M:%S UTC')"
+          echo "Archive: ${{ env.BACKUP_NAME }}"
+          echo "Artifact retained for 30 days."
+          echo "Git tag: backup/$(date -u +%Y-%m-%d)"

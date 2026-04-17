@@ -1,0 +1,121 @@
+name: CI – Validate & Test
+
+on:
+  push:
+    branches: ["main", "claude/**", "feature/**"]
+  pull_request:
+    branches: ["main"]
+
+jobs:
+  # ─── PHP Syntax Check ──────────────────────────────────────────────────────
+  php-lint:
+    name: PHP Syntax Check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup PHP 8.2
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: "8.2"
+
+      - name: Check PHP syntax
+        run: php -l send_order.php
+
+  # ─── HTML Validation ───────────────────────────────────────────────────────
+  html-validate:
+    name: HTML Validation
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install html-validate
+        run: npm install -g html-validate
+
+      - name: Create html-validate config
+        run: |
+          cat > .htmlvalidate.json << 'EOF'
+          {
+            "extends": ["html-validate:recommended"],
+            "rules": {
+              "no-trailing-whitespace": "off",
+              "long-title": "off"
+            }
+          }
+          EOF
+
+      - name: Validate HTML files
+        run: |
+          ERRORS=0
+          for file in *.html; do
+            echo "--- Validating $file ---"
+            html-validate "$file" || ERRORS=$((ERRORS + 1))
+          done
+          if [ $ERRORS -gt 0 ]; then
+            echo "HTML validation failed for $ERRORS file(s)."
+            exit 1
+          fi
+          echo "All HTML files validated successfully."
+
+  # ─── Internal Link Check ───────────────────────────────────────────────────
+  link-check:
+    name: Check Internal Links
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check internal links
+        run: |
+          ERRORS=0
+          for html_file in *.html; do
+            while IFS= read -r link; do
+              link_clean=$(echo "$link" | sed 's/^[[:space:]]*//')
+              if [[ -n "$link_clean" && ! -f "$link_clean" ]]; then
+                echo "BROKEN: $html_file → $link_clean"
+                ERRORS=$((ERRORS + 1))
+              fi
+            done < <(grep -oP 'href="\K[^"]+' "$html_file" | grep -v '^http' | grep -v '^#' | grep -v '^mailto')
+          done
+          if [ $ERRORS -gt 0 ]; then
+            echo "$ERRORS broken internal link(s) found."
+            exit 1
+          fi
+          echo "All internal links OK."
+
+  # ─── Security Scan ─────────────────────────────────────────────────────────
+  security-scan:
+    name: Security Scan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check for placeholder credentials
+        run: |
+          WARNINGS=0
+          if grep -rn "your-email@example.com" . --include="*.php" --include="*.html" 2>/dev/null; then
+            echo "WARNING: Placeholder email found – update CONTACT_EMAIL env var before production deploy."
+            WARNINGS=$((WARNINGS + 1))
+          fi
+          if grep -rn "password\s*=" . --include="*.php" -i 2>/dev/null | grep -v ".git"; then
+            echo "WARNING: Potential hardcoded password found."
+            WARNINGS=$((WARNINGS + 1))
+          fi
+          echo "Security scan complete. $WARNINGS warning(s)."
+          # Warnings don't fail the build; review output manually.
+
+      - name: Verify .htaccess protections present
+        run: |
+          if ! grep -q "Options -Indexes" .htaccess 2>/dev/null; then
+            echo "ERROR: .htaccess missing directory listing protection."
+            exit 1
+          fi
+          if ! grep -q "X-Content-Type-Options" .htaccess 2>/dev/null; then
+            echo "ERROR: .htaccess missing security headers."
+            exit 1
+          fi
+          echo ".htaccess security checks passed."

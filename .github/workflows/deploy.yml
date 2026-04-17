@@ -1,0 +1,77 @@
+name: Deploy to Production
+
+on:
+  push:
+    branches: ["main"]
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Dry run (no actual upload)"
+        required: false
+        default: "false"
+        type: boolean
+
+jobs:
+  deploy:
+    name: Deploy via FTP
+    runs-on: ubuntu-latest
+    environment: production
+    concurrency:
+      group: production-deploy
+      cancel-in-progress: false
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # Run CI checks before deploying
+      - name: Setup PHP 8.2
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: "8.2"
+
+      - name: PHP syntax gate
+        run: php -l send_order.php
+
+      - name: Verify required secrets exist
+        run: |
+          if [ -z "${{ secrets.FTP_SERVER }}" ]; then
+            echo "ERROR: FTP_SERVER secret is not set. Add it in Settings → Secrets → Actions."
+            exit 1
+          fi
+          if [ -z "${{ secrets.FTP_USERNAME }}" ]; then
+            echo "ERROR: FTP_USERNAME secret is not set."
+            exit 1
+          fi
+          if [ -z "${{ secrets.FTP_PASSWORD }}" ]; then
+            echo "ERROR: FTP_PASSWORD secret is not set."
+            exit 1
+          fi
+          echo "All required secrets present."
+
+      - name: Deploy via FTP
+        if: ${{ github.event.inputs.dry_run != 'true' }}
+        uses: SamKirkland/FTP-Deploy-Action@v4.3.4
+        with:
+          server: ${{ secrets.FTP_SERVER }}
+          username: ${{ secrets.FTP_USERNAME }}
+          password: ${{ secrets.FTP_PASSWORD }}
+          server-dir: ${{ secrets.FTP_SERVER_DIR || '/' }}
+          exclude: |
+            **/.git*
+            **/.git*/**
+            **/node_modules/**
+            send_order.php.txt
+            .htmlvalidate.json
+
+      - name: Dry run summary
+        if: ${{ github.event.inputs.dry_run == 'true' }}
+        run: |
+          echo "DRY RUN – files that would be deployed:"
+          find . -not -path './.git*' -not -name '*.txt' -type f | sort
+
+      - name: Deployment summary
+        if: ${{ github.event.inputs.dry_run != 'true' && success() }}
+        run: |
+          echo "Deployed to production at $(date -u '+%Y-%m-%d %H:%M:%S UTC')"
+          echo "Commit: ${{ github.sha }}"
+          echo "Triggered by: ${{ github.actor }}"
